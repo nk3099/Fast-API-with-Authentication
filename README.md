@@ -41,3 +41,102 @@ print(parsed_data["title"])  # Hello
 
 
 
+
+# Sample Code:
+
+<details>
+  <summary><strong>Python</strong></summary>
+
+  
+  ```python
+  import psycopg2
+  from fastapi import FastAPI, Depends, status
+  from pydantic import BaseModel
+
+  app = FastAPI()
+
+  # -------------------------
+  # Database Dependency
+  # -------------------------
+  def get_db():
+      """
+      Creates a new PostgreSQL connection for each request and closes it after.
+      """
+      conn = psycopg2.connect(
+          host="localhost",
+          database="fastapi",
+          user="postgres",
+          password="Learning@tools1"
+      )
+      try:
+          yield conn  # Provide the connection to the endpoint
+      finally:
+          conn.close()  # Ensure cleanup after request
+
+  # -------------------------
+  # Pydantic Schemas
+  # -------------------------
+  class PostCreate(BaseModel):
+      title: str
+      body: str
+
+  class PostResponse(BaseModel):
+      id: int
+      title: str
+      body: str
+
+  # -------------------------
+  # Create Post Endpoint
+  # -------------------------
+  @app.post("/posts", status_code=status.HTTP_201_CREATED, response_model=PostResponse)
+  def create_post(payload: PostCreate, db = Depends(get_db)):
+      """
+      Decorator:
+        - response_model=PostResponse tells FastAPI to validate/shape the output.
+        - status_code=201 sets the HTTP status.
+
+      Function:
+        - Receives the request body (validated as PostCreate) + DB connection via Depends(get_db).
+        - FastAPI will AUTOMATICALLY serialize the returned Pydantic model instance
+          (PostResponse) to JSON for the HTTP response.
+      """
+      cursor = db.cursor()
+      cursor.execute(
+          "INSERT INTO posts (title, body) VALUES (%s, %s) RETURNING id",
+          (payload.title, payload.body)
+      )
+      post_id = cursor.fetchone()[0]
+      db.commit()
+      cursor.close()
+
+      # ⬇️ Automatic JSON serialization happens here:
+      # Returning a Pydantic model instance. FastAPI converts it to JSON in the response.
+      return PostResponse(id=post_id, title=payload.title, body=payload.body)
+
+  # -------------------------
+  # Get All Posts Endpoint
+  # -------------------------
+  @app.get("/posts", response_model=list[PostResponse])
+  def get_posts(db = Depends(get_db)):
+      """
+      Decorator:
+        - response_model=list[PostResponse] ensures the response is a list of objects
+          that match the PostResponse schema.
+
+      Function:
+        - Receives a DB connection via Depends(get_db).
+        - Returns a Python list of Pydantic model instances.
+        - FastAPI AUTOMATICALLY serializes the list of models to a JSON array.
+      """
+      cursor = db.cursor()
+      cursor.execute("SELECT id, title, body FROM posts")
+      rows = cursor.fetchall()
+      cursor.close()
+
+      # ⬇️ Automatic JSON serialization happens here:
+      # Returning a Python list of Pydantic models; FastAPI converts it to a JSON array.
+
+
+
+
+
